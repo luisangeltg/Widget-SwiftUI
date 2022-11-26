@@ -8,7 +8,7 @@
 import WidgetKit
 import SwiftUI
 
-@main
+//@main
 struct MyWidgetBundle: WidgetBundle {
     var body: some Widget {
         MyWidget()

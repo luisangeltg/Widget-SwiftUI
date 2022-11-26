@@ -8,59 +8,143 @@
 import WidgetKit
 import SwiftUI
 
+//Modelo var
+
+struct Modelo: TimelineEntry {
+    var date: Date
+    var widgetData: [JsonData]
+}
+
+struct JsonData: Decodable {
+    var id: Int
+    var name: String
+    var email: String
+}
+
+//Provider
 struct Provider: TimelineProvider {
-    func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date())
+    func placeholder(in context: Context) -> Modelo {
+        return Modelo(
+            date: Date(),
+            widgetData: Array(
+                repeating: JsonData(id: 0, name: "", email: ""),
+                count: 2
+            )
+        )
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> ()) {
-        let entry = SimpleEntry(date: Date())
-        completion(entry)
+    func getSnapshot(in context: Context, completion: @escaping (Modelo) -> Void) {
+        completion(
+            Modelo(
+                date: Date(),
+                widgetData: Array(
+                    repeating: JsonData(id: 0, name: "", email: ""),
+                    count: 2
+                )
+            )
+        )
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> ()) {
-        var entries: [SimpleEntry] = []
+    func getTimeline(in context: Context, completion: @escaping (Timeline<Modelo>) -> Void) {
+        getJson { (modelData) in
+            let data = Modelo(date: Date(), widgetData: modelData)
+            guard let update = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) else { return }
+            let timeline = Timeline(entries: [data], policy: .after(update))
+            completion(timeline)
+        }
+    }
 
-        // Generate a timeline consisting of five entries an hour apart, starting from the current date.
-        let currentDate = Date()
-        for hourOffset in 0 ..< 5 {
-            let entryDate = Calendar.current.date(byAdding: .hour, value: hourOffset, to: currentDate)!
-            let entry = SimpleEntry(date: entryDate)
-            entries.append(entry)
+    typealias Entry = Modelo
+
+}
+
+func getJson(completion: @escaping ([JsonData]) -> ()) {
+    guard let url = URL(string: "https://jsonplaceholder.typicode.com/comments?postId=1") else { return }
+
+    URLSession.shared.dataTask(with: url) { data, _, _ in
+
+        guard let data = data else { return }
+        do {
+            let json = try JSONDecoder().decode([JsonData].self, from: data)
+            DispatchQueue.main.async {
+                completion(json)
+            }
+            print("success json")
+        } catch let error as NSError {
+            print("error json: ", error.localizedDescription)
         }
 
-        let timeline = Timeline(entries: entries, policy: .atEnd)
-        completion(timeline)
+    }.resume()
+}
+
+//Diseño - Vista
+
+struct vista: View {
+    let entry: Provider.Entry
+    @Environment(\.widgetFamily) var family
+
+    @ViewBuilder
+    var body: some View{
+        switch family {
+        case .systemSmall:
+            VStack(alignment: .center){
+                Text("Mi lista")
+                    .font(.largeTitle)
+                    .foregroundColor(.white)
+                    .bold()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue)
+                Spacer()
+                Text(String(entry.widgetData.count)).font(.custom("Arial", size:80)).bold()
+                Spacer()
+            }
+        case .systemMedium:
+            VStack(alignment: .center){
+                Text("Mi lista")
+                    .font(.largeTitle)
+                    .foregroundColor(.white)
+                    .bold()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue)
+                Spacer()
+                VStack(alignment: .leading){
+                    Text(entry.widgetData[0].name).bold()
+                    Text(entry.widgetData[0].email)
+                    Text(entry.widgetData[1].name).bold()
+                    Text(entry.widgetData[1].email)
+                }.padding(.leading)
+                Spacer()
+            }
+        default:
+            VStack(alignment: .center){
+                Text("Mi lista")
+                    .font(.largeTitle)
+                    .foregroundColor(.white)
+                    .bold()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue)
+                Spacer()
+                VStack(alignment: .leading){
+                    ForEach(entry.widgetData, id:\.id){item in
+                        Text(item.name).bold()
+                        Text(item.email)
+                    }
+                }.padding(.leading)
+                Spacer()
+            }
+        }
     }
 }
 
-struct SimpleEntry: TimelineEntry {
-    let date: Date
-}
-
-struct MyWidgetEntryView : View {
-    var entry: Provider.Entry
-
-    var body: some View {
-        Text(entry.date, style: .time)
-    }
-}
-
+//Configuracion
+@main
 struct MyWidget: Widget {
-    let kind: String = "MyWidget"
-
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            MyWidgetEntryView(entry: entry)
-        }
-        .configurationDisplayName("My Widget")
-        .description("This is an example widget.")
-    }
-}
-
-struct MyWidget_Previews: PreviewProvider {
-    static var previews: some View {
-        MyWidgetEntryView(entry: SimpleEntry(date: Date()))
-            .previewContext(WidgetPreviewContext(family: .systemSmall))
+        StaticConfiguration(kind: "widget", provider: Provider()) { entry in
+            vista(entry: entry)
+        }.description("Descripción del widget")
+            .configurationDisplayName("Nombre del Widget")
+            .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+            //.supportedFamilies([ .systemLarge])
     }
 }
